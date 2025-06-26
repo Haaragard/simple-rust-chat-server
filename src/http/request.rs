@@ -1,6 +1,8 @@
 use std::{collections::HashMap, io::Read, net::TcpStream, rc::Rc};
 
-use crate::http::enums::{HttpMethodEnum};
+use crate::http::consts::{CRLF};
+use crate::http::enums::{HttpMethodEnum, HttpContentTypeEnum};
+use crate::http::{DOUBLE_CRLF, QUERY_PARAM_SEPARATOR, QUERY_PARAM_START};
 
 #[derive(Debug)]
 pub struct Request {
@@ -9,6 +11,7 @@ pub struct Request {
     pub path: String,
     pub path_params: Rc<HashMap<String, String>>,
     pub headers: Rc<HashMap<String, String>>,
+    pub content_type: HttpContentTypeEnum,
     pub data: String,
 }
 
@@ -17,7 +20,7 @@ impl Request {
         let mut stream_data_first_part = {
             stream_data.first()
                 .unwrap()
-                .split("\r\n")
+                .split(CRLF)
                 .map(|s| s.to_string())
                 .collect::<Vec<String>>()
         };
@@ -47,7 +50,7 @@ impl Request {
             let path_data = request_string_split
                 .get(1)
                 .unwrap()
-                .split("?")
+                .split(QUERY_PARAM_START)
                 .map(|s| s.to_string())
                 .collect::<Vec<String>>();
 
@@ -57,9 +60,8 @@ impl Request {
         let headers = Self::build_headers(stream_data_first_part);
         let host = Self::build_host(&headers);
 
-        println!("\n\nRequest Data Length: {}\n\n{:?}\n\n\n\n\n", stream_data.len(), &stream_data);
-
-        let data = stream_data.last().unwrap().clone();
+        let content_type = Self::build_content_type(&headers);
+        let data = Self::build_data(&content_type, &mut stream_data.clone());
 
         Self {
             method,
@@ -67,6 +69,7 @@ impl Request {
             path,
             path_params: Rc::new(path_params),
             headers: Rc::new(headers),
+            content_type,
             data,
         }
     }
@@ -90,7 +93,7 @@ impl Request {
             let path_params_raw_iterator = raw_path_data
             .get(1)
             .unwrap()
-            .split("&");
+            .split(QUERY_PARAM_SEPARATOR);
             for path_param_raw in path_params_raw_iterator {
                 let path_param = path_param_raw
                     .split("=")
@@ -135,6 +138,22 @@ impl Request {
 
         headers
     }
+
+    fn build_content_type(headers: &HashMap<String, String>) -> HttpContentTypeEnum {
+        let raw_content_type = headers
+            .get(&String::from("content-type"))
+            .unwrap();
+
+        HttpContentTypeEnum::from(raw_content_type.clone())
+    }
+
+    fn build_data(content_type: &HttpContentTypeEnum, raw_data: &mut Vec<String>) -> String {
+        raw_data.remove(0);
+
+        // TODO: write build data logic.
+
+        String::new()
+    }
 }
 
 pub fn get_stream_data(stream: &mut TcpStream) -> Result<Vec<String>, ()> {
@@ -143,7 +162,7 @@ pub fn get_stream_data(stream: &mut TcpStream) -> Result<Vec<String>, ()> {
 
     let result_data = buffer.map(|byte| (byte as char).to_string())
         .join("")
-        .split("\r\n\r\n")
+        .split(DOUBLE_CRLF)
         .map(|s| s.to_string())
         .collect::<Vec::<String>>();
 
