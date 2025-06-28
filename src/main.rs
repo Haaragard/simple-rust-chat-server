@@ -24,7 +24,7 @@ pub fn handle_request(stream: &mut TcpStream) {
     let request_data = http::get_stream_data(stream).unwrap();
 
     let request = http::Request::new(request_data);
-    dbg!(&request);
+dbg!(&request);
 
     let response = response();
     stream.write_all(response.as_bytes()).unwrap();
