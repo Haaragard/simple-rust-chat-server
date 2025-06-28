@@ -1,3 +1,5 @@
+use crate::http::*;
+
 #[derive(Debug)]
 pub enum HttpMethodEnum {
     GET,
@@ -7,7 +9,8 @@ pub enum HttpMethodEnum {
 impl HttpMethodEnum {
     pub fn from(http_method_name: String) -> Self {
         match http_method_name.as_str() {
-            "GET" => Self::GET,
+            HTTP_METHOD_GET => Self::GET,
+            HTTP_METHOD_POST => Self::POST,
             _ => panic!("Request method not implemented.")
         }
     }
@@ -15,16 +18,23 @@ impl HttpMethodEnum {
 
 #[derive(Debug)]
 pub struct HttpContentFormData {
-    boundary_start: String,
-    boundary_end: String,
+    pub boundary_start: String,
+    pub boundary_end: String,
 }
 
 impl HttpContentFormData {
     pub fn from(boundary: String) -> Self {
-        // TODO
+        let boundary = boundary.trim().replace("boundary=", "");
+        let mut boundary_start = boundary.clone();
+        boundary_start.push_str(CRLF);
+
+        let mut boundary_end = boundary.clone();
+        boundary_end.push_str("--");
+        boundary_end.push_str(CRLF);
+
         Self {
-            boundary_start: String::new(),
-            boundary_end: String::new(),
+            boundary_start,
+            boundary_end,
         }
     }
 }
