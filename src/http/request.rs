@@ -1,8 +1,10 @@
+use std::ops::Deref;
 use std::{collections::HashMap, io::Read, net::TcpStream, rc::Rc};
 
-use crate::http::consts::{CRLF};
+use regex::Regex;
+
+use crate::http::consts::*;
 use crate::http::enums::{HttpMethodEnum, HttpContentTypeEnum};
-use crate::http::{DOUBLE_CRLF, QUERY_PARAM_SEPARATOR, QUERY_PARAM_START};
 
 #[derive(Debug)]
 pub struct Request {
@@ -12,7 +14,7 @@ pub struct Request {
     pub path_params: Rc<HashMap<String, String>>,
     pub headers: Rc<HashMap<String, String>>,
     pub content_type: HttpContentTypeEnum,
-    pub data: String,
+    pub data: HashMap<String, String>,
 }
 
 impl Request {
@@ -61,7 +63,17 @@ impl Request {
         let host = Self::build_host(&headers);
 
         let content_type = Self::build_content_type(&headers);
-        let data = Self::build_data(&content_type, &mut stream_data.clone());
+        
+        let stream_second_part_as_string = {
+            let mut stream_clone = stream_data.clone();
+            stream_clone.remove(0);
+
+            stream_clone.join("")
+        };
+        let data = Self::build_data(
+            &content_type,
+            stream_second_part_as_string
+        );
 
         Self {
             method,
@@ -147,12 +159,51 @@ impl Request {
         HttpContentTypeEnum::from(raw_content_type.clone())
     }
 
-    fn build_data(content_type: &HttpContentTypeEnum, raw_data: &mut Vec<String>) -> String {
-        raw_data.remove(0);
+    fn build_data(content_type: &HttpContentTypeEnum, raw_data: String) -> HashMap<String, String> {
+        let mut result: HashMap<String, String> = HashMap::new();
+        match content_type {
+            HttpContentTypeEnum::FormData(content) => {
+                // Get raw data as string
+                let data_as_string = raw_data
+                    .split(content.boundary_end.deref())
+                    .nth(0)
+                    .unwrap();
 
-        // TODO: write build data logic.
+                // Split string as Vec<String>
+                let data = data_as_string.replace(content.boundary_start.deref(), "")
+                    .split(CRLF)
+                    .map(
+                        |string| string
+                            .replace("--", "")
+                            .replace("Content-Disposition: form-data;", "")
+                    )
+                    .collect::<Vec<String>>()
+                    .iter()
+                    .map(|values| {
+                        let trimmed_string = values.trim();
 
-        String::new()
+                        let key_regex_start = Regex::new("(name=)(\\\")").unwrap();
+                        let key_regex_end = Regex::new("(\\\")(.*)").unwrap();
+
+                        let mut key = key_regex_start.replace(trimmed_string, "").to_string();
+                        key = key_regex_end.replace(&key, "").to_string();
+
+                        let value_regex = Regex::new("(name=)(\\\")(.*)(\\\")").unwrap();
+                        let value = value_regex.replace(trimmed_string, "").to_string();
+
+                        (key, value)
+                    })
+                    .filter(|value| !value.0.is_empty())
+                    .collect::<Vec<(String, String)>>();
+
+                data.iter().for_each(|values| {
+                    result.insert(values.0.clone(), values.1.clone());
+                });
+            },
+            _ => {},
+        };
+
+        result
     }
 }
 
